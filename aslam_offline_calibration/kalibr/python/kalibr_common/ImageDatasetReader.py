@@ -6,7 +6,7 @@ import numpy as np
 import pylab as pl
 import aslam_cv as acv
 import sm
-
+import time
 
 class BagImageDatasetReaderIterator(object):
   def __init__(self, dataset, indices=None):
@@ -206,3 +206,49 @@ class BagImageDatasetReader(object):
         "Unsupported Image Type: '{}'\nSupported are: "
         "mv_cameras/ImageSnappyMsg, sensor_msgs/CompressedImage, sensor_msgs/Image".format(data._type))
     return (timestamp, img_data)
+
+class FolderImageDatasetReader(object):
+  def __init__(self, folder, imagetopic):
+    self.folder = folder
+    self.uncompress = None
+    # keep use topic, because some code actually access it
+    self.topic = imagetopic
+    if self.topic is None:
+      self.topic = ''
+
+    self.CVB = cv_bridge.CvBridge()
+    globs = ['*.jpg', '*.png', '*.jpeg', '*.JPG', '*.PNG']
+
+    input_images_list = []
+    for g in globs:
+        input_images_list += [p.name for p in self.folder.glob('**/'+g) if p.name.startswith(self.topic) ]
+
+    input_images_list.sort()
+    self.imgage_list = input_images_list
+    self.indices = np.arange(len(self.imgage_list))
+
+
+  def __iter__(self):
+    # Reset the bag reading
+    return self.readDataset()
+
+  def readDataset(self):
+    return BagImageDatasetReaderIterator(self, self.indices)
+
+  def readDatasetShuffle(self):
+    indices = self.indices
+    np.random.shuffle(indices)
+    return BagImageDatasetReaderIterator(self, indices)
+
+  def numImages(self):
+    return len(self.indices)
+
+  def getImage(self, idx):
+    file = self.folder / self.imgage_list[idx]
+    img_data = cv2.imread(str(file), cv2.IMREAD_GRAYSCALE)
+    float_secs = time.time()
+    secs = int(float_secs)
+    nsecs = int((float_secs - secs) * 1000000000)
+    timestamp = acv.Time(secs, nsecs)
+    return (timestamp, img_data)
+  
